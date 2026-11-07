@@ -37,7 +37,7 @@ export default async function DashboardLayout({
     <div className="min-h-screen flex bg-[#fdfaf3]">
       <aside className="w-60 bg-white border-r-2 border-brand-orange/30 p-4 hidden md:flex md:flex-col">
         <h2 className="font-bold text-lg text-brand-red mb-6 flex items-center gap-2">
-          <span>🥩</span> CxC / CxP
+          <span>🥩</span> Contabilidad a tu alcance
         </h2>
         <nav className="space-y-1 flex-1">
           {nav

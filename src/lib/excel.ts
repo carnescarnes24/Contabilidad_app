@@ -28,14 +28,14 @@ export async function exportToExcel(
   logoUrl?: string // <-- NUEVO PARÁMETRO
 ) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "CxC / CxP";
+  workbook.creator = "Contabilidad a tu alcance";
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet(sheetName);
   const numCols = columns.length;
 
   // 2. Fila 1: Nombre del aplicativo
-  const titleRow = sheet.addRow(["CxC / CxP - Gestión Financiera"]);
+  const titleRow = sheet.addRow(["Contabilidad a tu alcance - Gestión Financiera"]);
   titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
   titleRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCD0508" } };
   titleRow.alignment = { vertical: "middle", horizontal: "center" };

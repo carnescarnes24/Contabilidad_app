@@ -52,7 +52,7 @@ export default function LoginPage() {
             <span className="text-3xl">🥩</span>
           </div>
           <h1 className="text-2xl font-bold text-brand-brown">
-            Cuentas CxC / CxP
+            Contabilidad a tu alcance
           </h1>
           <p className="text-sm text-brand-brown/70">
             Gestión financiera de tu carnicería
@@ -97,7 +97,7 @@ export default function LoginPage() {
         </form>
 
         <div className="text-center text-xs text-brand-brown/60 pt-2 border-t border-brand-orange/20">
-          Demo: <span className="font-mono">admin@demo.com</span> / <span className="font-mono">admin123</span>
+          Todos los derechos reservados
         </div>
       </div>
     </div>
