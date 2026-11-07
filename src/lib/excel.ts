@@ -89,7 +89,7 @@ export async function exportToExcel(
   rows.forEach((r) => sheet.addRow(columns.map(c => r[c.key])));
 
   // 8. Estilos para las filas de datos
-  const lastDataRow = sheet.lastRow.number;
+  const lastDataRow = sheet.lastRow ? sheet.lastRow.number : 6;
   for (let i = 6; i <= lastDataRow; i++) {
     const row = sheet.getRow(i);
     row.alignment = { vertical: "middle" };

@@ -98,16 +98,14 @@ export async function deleteThirdParty(id: string) {
   if (!business) throw new Error("Sin negocio activo");
 
   const party = await prisma.thirdParty.findFirst({
-    where: {
-      id: data.thirdPartyId,
-      businessId: business.id,
-      active: true,
-      type: { in: ["CLIENTE", "AMBOS"] },
-    },
+    where: { id, businessId: business.id },
+    include: { _count: { select: { invoices: true } } },
   });
-  if (!party) {
+  if (!party) throw new Error("Tercero no encontrado");
+
+  if (party._count.invoices > 0) {
     throw new Error(
-      "El tercero seleccionado no pertenece a este negocio o no es un cliente válido"
+      `No se puede eliminar: tiene ${party._count.invoices} factura(s) asociada(s). Desactívalo en su lugar.`
     );
   }
 

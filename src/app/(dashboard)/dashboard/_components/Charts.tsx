@@ -29,7 +29,7 @@ export function MonthlyFlowChart({
         <XAxis dataKey="label" stroke="#B05328" fontSize={12} />
         <YAxis stroke="#B05328" fontSize={12} tickFormatter={fmtShort} />
         <Tooltip
-          formatter={(v: number) => fmt(v)}
+          formatter={(v: any) => fmt(Number(v))}
           contentStyle={{
             background: "#fff",
             border: "1px solid #F29E4C",
@@ -74,7 +74,7 @@ export function AgingChart({
           ))}
         </Pie>
         <Tooltip
-          formatter={(v: number) => fmt(v)}
+          formatter={(v: any) => fmt(Number(v))}
           contentStyle={{
             background: "#fff",
             border: "1px solid #F29E4C",

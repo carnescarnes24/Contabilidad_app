@@ -36,7 +36,7 @@ export function ThirdPartyForm() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger>
         <Button>+ Nuevo tercero</Button>
       </DialogTrigger>
       <DialogContent>
