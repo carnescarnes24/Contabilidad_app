@@ -61,9 +61,6 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="text-center text-xs text-brand-brown/60 pt-2 border-t border-brand-orange/20">
-          Demo: <span className="font-mono">admin@demo.com</span> / <span className="font-mono">admin123</span>
-        </div>
       </div>
     </div>
   );
