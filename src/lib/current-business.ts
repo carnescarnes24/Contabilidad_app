@@ -7,6 +7,12 @@ export async function getCurrentBusiness() {
   if (!session) return null;
 
   const userBusinesses = (session.user as any).businesses as string[];
+  
+  // Si el usuario no tiene empresas asignadas, retornamos null inmediatamente
+  if (!userBusinesses || userBusinesses.length === 0) {
+    return null;
+  }
+
   const cookieStore = await cookies();
   const cookieId = cookieStore.get("businessId")?.value;
 

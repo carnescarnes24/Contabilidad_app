@@ -39,7 +39,19 @@ function StatusBadge({ status }: { status: string }) {
 
 export default async function DashboardPage() {
   const business = await getCurrentBusiness();
-  if (!business) return <p className="text-slate-500">Sin negocio asignado</p>;
+  if (!business) {
+  return (
+    <div className="p-8 text-center bg-white rounded-2xl border-2 border-brand-orange/20 shadow-sm max-w-lg mx-auto mt-10">
+      <h2 className="text-xl font-bold text-brand-brown mb-2">¡Bienvenido!</h2>
+      <p className="text-slate-600 mb-4">
+        Aún no tienes ninguna empresa asignada. Por favor, ve al módulo de <strong>Empresas</strong> y crea tu primera empresa para empezar a facturar.
+      </p>
+      <a href="/empresas" className="inline-block bg-brand-red text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-red/90">
+        Ir a Empresas
+      </a>
+    </div>
+  );
+}
 
   const d = await getDashboardData(business.id);
 
