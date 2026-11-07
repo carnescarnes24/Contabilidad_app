@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+model Business {
+  id           String       @id @default(cuid())
+  name         String
+  nit          String?      @unique
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  users        UserBusiness[]
+  thirdParties ThirdParty[]
+  invoices     Invoice[]
+  configs      AppConfig[]
+}
+
+model User {
+  id         String         @id @default(cuid())
+  email      String         @unique
+  name       String
+  password   String
+  role       Role           @default(VIEWER)
+  active     Boolean        @default(true)
+  businesses UserBusiness[]
+  createdAt  DateTime       @default(now())
+}
+
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  VIEWER
+}
+
+model UserBusiness {
+  userId     String
+  businessId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@id([userId, businessId])
+}
+
+model ThirdParty {
+  id         String        @id @default(cuid())
+  businessId String
+  business   Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type       ThirdPartyType
+  docType    String
+  docNumber  String
+  name       String
+  email      String?
+  phone      String?
+  address    String?
+  active     Boolean       @default(true)
+  invoices   Invoice[]
+  createdAt  DateTime      @default(now())
+  @@unique([businessId, docNumber])
+  @@index([businessId])
+}
+
+enum ThirdPartyType {
+  CLIENTE
+  PROVEEDOR
+  AMBOS
+}
+
+model Invoice {
+  id           String        @id @default(cuid())
+  businessId   String
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  thirdPartyId String
+  thirdParty   ThirdParty    @relation(fields: [thirdPartyId], references: [id])
+  type         InvoiceType
+  number       String
+  issueDate    DateTime
+  dueDate      DateTime
+  amount       Decimal       @db.Decimal(14, 2)
+  paidAmount   Decimal       @default(0) @db.Decimal(14, 2)
+  status       InvoiceStatus @default(PENDIENTE)
+  notes        String?
+  payments     Payment[]
+  createdAt    DateTime      @default(now())
+  @@unique([businessId, type, number])
+  @@index([businessId, type, status])
+  @@index([dueDate])
+}
+
+enum InvoiceType {
+  COBRAR
+  PAGAR
+}
+
+enum InvoiceStatus {
+  PENDIENTE
+  PARCIAL
+  PAGADA
+  VENCIDA
+  ANULADA
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount    Decimal  @db.Decimal(14, 2)
+  date      DateTime @default(now())
+  method    String?
+  reference String?
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+model AppConfig {
+  id         String    @id @default(cuid())
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  key        String
+  value      String
+  @@unique([businessId, key])
+}
