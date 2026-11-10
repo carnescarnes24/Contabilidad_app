@@ -9,6 +9,8 @@ import {
   createReceivable,
   deleteInvoice,
   registerPayment,
+  updateInvoice,
+  deletePayment,
 } from "./actions";
 
 type InvoiceRow = {
@@ -22,6 +24,7 @@ type InvoiceRow = {
   paidAmount: number;
   status: "PENDIENTE" | "PARCIAL" | "PAGADA" | "VENCIDA" | "ANULADA";
   notes: string | null;
+  payments: { id: string; amount: number; date: string; method: string | null; reference: string | null }[]; // <-- NUEVO
 };
 
 type Party = { id: string; name: string };
@@ -54,10 +57,12 @@ export function ReceivablesTable({
   const [filter, setFilter] = useState<StatusFilter>("TODAS");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
 
-  // Modal factura
+  // Modales
   const [newOpen, setNewOpen] = useState(false);
-  // Modal pago
   const [payInvoice, setPayInvoice] = useState<InvoiceRow | null>(null);
+  const [editInvoice, setEditInvoice] = useState<InvoiceRow | null>(null); // <-- NUEVO
+  const [managePaymentsInvoice, setManagePaymentsInvoice] = useState<InvoiceRow | null>(null); // <-- NUEVO
+
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -130,6 +135,40 @@ export function ReceivablesTable({
       setMsg((err as Error).message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onEdit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editInvoice) return;
+    setLoading(true);
+    setMsg(null);
+    const fd = new FormData(e.currentTarget);
+    try {
+      await updateInvoice(editInvoice.id, {
+        number: fd.get("number"),
+        issueDate: fd.get("issueDate"),
+        dueDate: fd.get("dueDate"),
+        amount: fd.get("amount"),
+        notes: fd.get("notes") || undefined,
+      });
+      setEditInvoice(null);
+      router.refresh();
+    } catch (err) {
+      setMsg((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onDeletePayment(paymentId: string, invoiceId: string) {
+    if (!confirm("¿Eliminar este pago? El saldo de la factura se recalculará.")) return;
+    try {
+      await deletePayment(paymentId, invoiceId);
+      setManagePaymentsInvoice(null); // Cierra el modal para refrescar los datos
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message);
     }
   }
 
@@ -268,6 +307,12 @@ export function ReceivablesTable({
                   <td className="p-3 text-right space-x-2 whitespace-nowrap">
                     {canEdit && (
                       <>
+                        <button
+                          onClick={() => setManagePaymentsInvoice(i)}
+                          className="text-sm text-brand-brown hover:underline font-medium"
+                        >
+                          Ver Pagos
+                        </button>
                         {canPay && (
                           <button
                             onClick={() => {
@@ -280,12 +325,23 @@ export function ReceivablesTable({
                           </button>
                         )}
                         {i.status !== "ANULADA" && (
-                          <button
-                            onClick={() => onDelete(i)}
-                            className="text-sm text-slate-500 hover:underline"
-                          >
-                            Anular
-                          </button>
+                          <>
+                            <button
+                              onClick={() => {
+                                setMsg(null);
+                                setEditInvoice(i);
+                              }}
+                              className="text-sm text-slate-600 hover:underline"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => onDelete(i)}
+                              className="text-sm text-slate-500 hover:underline"
+                            >
+                              Anular
+                            </button>
+                          </>
                         )}
                       </>
                     )}
@@ -518,6 +574,90 @@ export function ReceivablesTable({
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Factura */}
+      {editInvoice && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Editar Factura {editInvoice.number}</h2>
+            <p className="text-sm text-slate-500 mb-3">Empresa: {businessName}</p>
+            <form onSubmit={onEdit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Número</label>
+                  <Input name="number" defaultValue={editInvoice.number} required />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Monto</label>
+                  <Input name="amount" type="number" step="0.01" min="0.01" defaultValue={editInvoice.amount} required disabled={editInvoice.paidAmount > 0} />
+                  {editInvoice.paidAmount > 0 && <p className="text-[10px] text-red-500 mt-1">Bloqueado: la factura tiene pagos.</p>}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Emisión</label>
+                  <Input name="issueDate" type="date" defaultValue={new Date(editInvoice.issueDate).toISOString().slice(0, 10)} required />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Vencimiento</label>
+                  <Input name="dueDate" type="date" defaultValue={new Date(editInvoice.dueDate).toISOString().slice(0, 10)} required />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Notas (opcional)</label>
+                <Input name="notes" defaultValue={editInvoice.notes || ""} />
+              </div>
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setEditInvoice(null)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">{loading ? "Guardando..." : "Guardar Cambios"}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Gestión de Pagos */}
+      {managePaymentsInvoice && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Pagos de la Factura {managePaymentsInvoice.number}</h2>
+            <p className="text-sm text-slate-500 mb-4">Total Factura: {formatCOP(managePaymentsInvoice.amount)}</p>
+            
+            {managePaymentsInvoice.payments.length === 0 ? (
+              <p className="text-sm text-slate-500 py-4 text-center">No hay pagos registrados.</p>
+            ) : (
+              <div className="border border-brand-orange/20 rounded-lg overflow-hidden mb-4">
+                <table className="w-full text-sm">
+                  <thead className="bg-brand-cream/50 text-left">
+                    <tr>
+                      <th className="p-2">Fecha</th>
+                      <th className="p-2">Método</th>
+                      <th className="p-2">Referencia</th>
+                      <th className="p-2 text-right">Monto</th>
+                      <th className="p-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {managePaymentsInvoice.payments.map(p => (
+                      <tr key={p.id} className="border-t border-brand-orange/10">
+                        <td className="p-2">{formatDate(p.date)}</td>
+                        <td className="p-2">{p.method || "-"}</td>
+                        <td className="p-2 text-xs text-slate-500">{p.reference || "-"}</td>
+                        <td className="p-2 text-right font-semibold text-emerald-700">{formatCOP(p.amount)}</td>
+                        <td className="p-2 text-right">
+                          <button onClick={() => onDeletePayment(p.id, managePaymentsInvoice.id)} className="text-red-600 hover:underline text-xs">Eliminar</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setManagePaymentsInvoice(null)}>Cerrar</Button>
+            </div>
           </div>
         </div>
       )}

@@ -14,7 +14,10 @@ export default async function ReceivablesPage() {
   const [invoices, parties, configs] = await Promise.all([
     prisma.invoice.findMany({
       where: { businessId: business.id, type: "COBRAR" },
-      include: { thirdParty: { select: { id: true, name: true } } },
+      include: { 
+        thirdParty: { select: { id: true, name: true } },
+        payments: { orderBy: { date: "desc" } } // <-- NUEVO: Incluir pagos
+      },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
     }),
     prisma.thirdParty.findMany({
@@ -50,6 +53,13 @@ export default async function ReceivablesPage() {
     paidAmount: Number(i.paidAmount),
     status: i.status,
     notes: i.notes,
+    payments: i.payments.map(p => ({ // <-- NUEVO: Mapear pagos
+      id: p.id,
+      amount: Number(p.amount),
+      date: p.date.toISOString(),
+      method: p.method,
+      reference: p.reference,
+    })),
   }));
 
   const canEdit = (session.user as any).role !== "VIEWER";

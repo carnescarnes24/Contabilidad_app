@@ -1,11 +1,11 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getCurrentBusiness } from "@/lib/current-business";
-import { PayablesTable } from "./table"; // <-- Corregido: PayablesTable
+import { PayablesTable } from "./table";
 
 export const instant = false;
 
-export default async function PayablesPage() { // <-- Corregido: PayablesPage
+export default async function PayablesPage() {
   const session = await auth();
   if (!session) return null;
   const business = await getCurrentBusiness();
@@ -14,14 +14,17 @@ export default async function PayablesPage() { // <-- Corregido: PayablesPage
   const [invoices, parties, configs] = await Promise.all([
     prisma.invoice.findMany({
       where: { businessId: business.id, type: "PAGAR" },
-      include: { thirdParty: { select: { id: true, name: true } } },
+      include: { 
+        thirdParty: { select: { id: true, name: true } },
+        payments: { orderBy: { date: "desc" } } // <-- NUEVO: Incluir pagos
+      },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
     }),
     prisma.thirdParty.findMany({
       where: {
         businessId: business.id,
         active: true,
-        type: { in: ["PROVEEDOR", "AMBOS"] }, // <-- Corregido: Proveedores
+        type: { in: ["PROVEEDOR", "AMBOS"] },
       },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
@@ -35,7 +38,7 @@ export default async function PayablesPage() { // <-- Corregido: PayablesPage
   }, {} as Record<string, string>);
 
   const defaults = {
-    prefix: configMap["payable_prefix"] ?? "FP-", // <-- Corregido: payable_prefix
+    prefix: configMap["payable_prefix"] ?? "FP-",
     dueDays: Number(configMap["default_due_days"] ?? 30),
   };
 
@@ -50,6 +53,13 @@ export default async function PayablesPage() { // <-- Corregido: PayablesPage
     paidAmount: Number(i.paidAmount),
     status: i.status,
     notes: i.notes,
+    payments: i.payments.map(p => ({ // <-- NUEVO: Mapear pagos
+      id: p.id,
+      amount: Number(p.amount),
+      date: p.date.toISOString(),
+      method: p.method,
+      reference: p.reference,
+    })),
   }));
 
   const canEdit = (session.user as any).role !== "VIEWER";
@@ -57,13 +67,13 @@ export default async function PayablesPage() { // <-- Corregido: PayablesPage
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-brand-brown">Cuentas por pagar</h1> {/* <-- Corregido */}
+        <h1 className="text-2xl font-bold text-brand-brown">Cuentas por pagar</h1>
         <p className="text-sm text-slate-500">
           Facturas pendientes de <span className="text-brand-red font-medium">{business.name}</span>.
           Cada empresa maneja sus propios proveedores y facturas.
         </p>
       </div>
-      <PayablesTable // <-- Corregido: PayablesTable
+      <PayablesTable
         key={business.id}
         businessId={business.id}
         businessName={business.name}
