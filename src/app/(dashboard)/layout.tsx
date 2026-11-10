@@ -43,7 +43,7 @@ export default async function DashboardLayout({
       {/* Sidebar */}
       <aside className="w-60 bg-white border-r-2 border-brand-orange/30 p-4 hidden md:flex md:flex-col shrink-0">
         <h2 className="font-bold text-lg text-brand-red mb-6 flex items-center gap-2">
-          <span>🥩</span> Contabilidad a tu alcance
+          <span>📊</span> Contabilidad a tu alcance
         </h2>
         <nav className="space-y-1 flex-1">
           {nav

@@ -49,7 +49,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-brand-gold/40 p-8 space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-brand-red to-brand-orange shadow-lg">
-            <span className="text-3xl">🥩</span>
+            <span className="text-3xl">📊</span>
           </div>
           <h1 className="text-2xl font-bold text-brand-brown">
             Contabilidad a tu alcance
