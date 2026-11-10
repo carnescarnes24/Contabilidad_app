@@ -16,7 +16,7 @@ export default async function ReceivablesPage() {
       where: { businessId: business.id, type: "COBRAR" },
       include: { 
         thirdParty: { select: { id: true, name: true } },
-        payments: { orderBy: { date: "desc" } } // <-- NUEVO: Incluir pagos
+        payments: { orderBy: { date: "desc" } } 
       },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
     }),
@@ -53,7 +53,7 @@ export default async function ReceivablesPage() {
     paidAmount: Number(i.paidAmount),
     status: i.status,
     notes: i.notes,
-    payments: i.payments.map(p => ({ // <-- NUEVO: Mapear pagos
+    payments: i.payments.map(p => ({
       id: p.id,
       amount: Number(p.amount),
       date: p.date.toISOString(),

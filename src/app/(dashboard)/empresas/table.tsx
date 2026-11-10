@@ -46,17 +46,20 @@ export function BusinessesTable({ initial }: { initial: BusinessRow[] }) {
           name: fd.get("name"),
           nit: fd.get("nit"),
         });
+        setOpen(false);
+        router.refresh(); // En edición, un refresh normal es suficiente
       } else {
         await createBusiness({
           name: fd.get("name"),
           nit: fd.get("nit"),
         });
+        setOpen(false);
+        // Al crear una empresa nueva, forzamos recarga completa 
+        // para que el JWT se actualice y el selector del header la muestre
+        window.location.reload(); 
       }
-      setOpen(false);
-      router.refresh();
     } catch (err) {
       setMsg((err as Error).message);
-    } finally {
       setLoading(false);
     }
   }

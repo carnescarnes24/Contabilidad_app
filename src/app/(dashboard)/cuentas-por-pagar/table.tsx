@@ -18,7 +18,7 @@ type InvoiceRow = {
   paidAmount: number;
   status: "PENDIENTE" | "PARCIAL" | "PAGADA" | "VENCIDA" | "ANULADA";
   notes: string | null;
-  payments: { id: string; amount: number; date: string; method: string | null; reference: string | null }[]; // <-- NUEVO
+  payments: { id: string; amount: number; date: string; method: string | null; reference: string | null }[];
 };
 
 type Party = { id: string; name: string };
@@ -30,6 +30,15 @@ type StatusFilter =
   | "VENCIDA"
   | "PAGADA"
   | "ANULADA";
+
+type SortOption =
+  | "DUE_ASC"
+  | "DUE_DESC"
+  | "ISSUE_DESC"
+  | "ISSUE_ASC"
+  | "AMOUNT_DESC"
+  | "AMOUNT_ASC"
+  | "BALANCE_DESC";
 
 export function PayablesTable({
   businessId,
@@ -50,17 +59,19 @@ export function PayablesTable({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("TODAS");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("DUE_ASC"); // <-- NUEVO ESTADO
 
   const [newOpen, setNewOpen] = useState(false);
   const [payInvoice, setPayInvoice] = useState<InvoiceRow | null>(null);
-  const [editInvoice, setEditInvoice] = useState<InvoiceRow | null>(null); // <-- NUEVO
-  const [managePaymentsInvoice, setManagePaymentsInvoice] = useState<InvoiceRow | null>(null); // <-- NUEVO
+  const [editInvoice, setEditInvoice] = useState<InvoiceRow | null>(null);
+  const [managePaymentsInvoice, setManagePaymentsInvoice] = useState<InvoiceRow | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const rows = useMemo(() => {
-    return initial.filter((i) => {
+    // 1. Filtrar
+    const filtered = initial.filter((i) => {
       if (filter !== "TODAS" && i.status !== filter) return false;
       if (onlyOverdue && i.status !== "VENCIDA") return false;
       const q = search.trim().toLowerCase();
@@ -70,7 +81,29 @@ export function PayablesTable({
         i.thirdPartyName.toLowerCase().includes(q)
       );
     });
-  }, [initial, search, filter, onlyOverdue]);
+
+    // 2. Ordenar
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "DUE_ASC":
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        case "DUE_DESC":
+          return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime();
+        case "ISSUE_DESC":
+          return new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime();
+        case "ISSUE_ASC":
+          return new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime();
+        case "AMOUNT_DESC":
+          return b.amount - a.amount;
+        case "AMOUNT_ASC":
+          return a.amount - b.amount;
+        case "BALANCE_DESC":
+          return (b.amount - b.paidAmount) - (a.amount - a.paidAmount);
+        default:
+          return 0;
+      }
+    });
+  }, [initial, search, filter, onlyOverdue, sortBy]);
 
   const totals = useMemo(() => {
     const pendiente = rows.reduce(
@@ -158,7 +191,7 @@ export function PayablesTable({
     if (!confirm("¿Eliminar este pago? El saldo de la factura se recalculará.")) return;
     try {
       await deletePayment(paymentId, invoiceId);
-      setManagePaymentsInvoice(null); // Cierra el modal para refrescar los datos
+      setManagePaymentsInvoice(null);
       router.refresh();
     } catch (err) {
       alert((err as Error).message);
@@ -166,12 +199,7 @@ export function PayablesTable({
   }
 
   async function onDelete(inv: InvoiceRow) {
-    if (
-      !confirm(
-        `¿Anular la factura ${inv.number}? Esta acción no elimina los pagos registrados.`
-      )
-    )
-      return;
+    if (!confirm(`¿Anular la factura ${inv.number}? Esta acción no elimina los pagos registrados.`)) return;
     try {
       await deleteInvoice(inv.id);
       router.refresh();
@@ -182,7 +210,7 @@ export function PayablesTable({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+      <div className="flex flex-col xl:flex-row xl:items-center gap-2 justify-between">
         <div className="flex flex-wrap gap-2 items-center">
           <Input
             placeholder="Buscar por número o proveedor..."
@@ -202,7 +230,23 @@ export function PayablesTable({
             <option value="PAGADA">Pagadas</option>
             <option value="ANULADA">Anuladas</option>
           </select>
-          <label className="text-sm text-brand-brown flex items-center gap-1">
+
+          {/* NUEVO SELECTOR DE ORDEN */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="border border-brand-orange/40 rounded-lg px-3 py-2 text-sm bg-white text-brand-brown"
+          >
+            <option value="DUE_ASC">Vencimiento (Próximas)</option>
+            <option value="DUE_DESC">Vencimiento (Lejanas)</option>
+            <option value="ISSUE_DESC">Emisión (Recientes)</option>
+            <option value="ISSUE_ASC">Emisión (Antiguas)</option>
+            <option value="AMOUNT_DESC">Monto (Mayor a menor)</option>
+            <option value="AMOUNT_ASC">Monto (Menor a mayor)</option>
+            <option value="BALANCE_DESC">Saldo Pendiente (Mayor)</option>
+          </select>
+
+          <label className="text-sm text-brand-brown flex items-center gap-1 ml-2">
             <input
               type="checkbox"
               checked={onlyOverdue}
@@ -217,7 +261,7 @@ export function PayablesTable({
               setMsg(null);
               setNewOpen(true);
             }}
-            className="bg-brand-red hover:bg-brand-red/90 text-white"
+            className="bg-brand-red hover:bg-brand-red/90 text-white shrink-0"
           >
             + Nueva factura
           </Button>
@@ -244,110 +288,114 @@ export function PayablesTable({
       </div>
 
       <div className="bg-white rounded-2xl border-2 border-brand-orange/20 overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-brand-cream/50 text-left text-brand-brown">
-            <tr>
-              <th className="p-3">Número</th>
-              <th className="p-3">Proveedor</th>
-              <th className="p-3">Vencimiento</th>
-              <th className="p-3 text-right">Total</th>
-              <th className="p-3 text-right">Pagado</th>
-              <th className="p-3 text-right">Saldo</th>
-              <th className="p-3">Estado</th>
-              <th className="p-3 text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((i) => {
-              const saldo = i.amount - i.paidAmount;
-              const days = daysUntil(i.dueDate);
-              const canPay = saldo > 0.01 && i.status !== "ANULADA";
-              return (
-                <tr
-                  key={i.id}
-                  className="border-t border-brand-orange/10 hover:bg-brand-cream/20"
-                >
-                  <td className="p-3 font-mono text-xs">{i.number}</td>
-                  <td className="p-3">
-                    <Link
-                      href={`/terceros/${i.thirdPartyId}`}
-                      className="text-brand-brown hover:text-brand-red hover:underline"
-                    >
-                      {i.thirdPartyName}
-                    </Link>
-                  </td>
-                  <td className="p-3">
-                    {formatDate(i.dueDate)}
-                    {saldo > 0.01 && days < 0 && (
-                      <span className="text-xs text-red-600 ml-1">
-                        ({Math.abs(days)}d)
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3 text-right">{formatCOP(i.amount)}</td>
-                  <td className="p-3 text-right text-slate-600">
-                    {formatCOP(i.paidAmount)}
-                  </td>
-                  <td className="p-3 text-right font-semibold text-rose-700">
-                    {formatCOP(saldo)}
-                  </td>
-                  <td className="p-3">
-                    <StatusBadge status={i.status} />
-                  </td>
-                  <td className="p-3 text-right space-x-2 whitespace-nowrap">
-                    {canEdit && (
-                      <>
-                        <button
-                          onClick={() => setManagePaymentsInvoice(i)}
-                          className="text-sm text-brand-brown hover:underline font-medium"
-                        >
-                          Ver Pagos
-                        </button>
-                        {canPay && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-brand-cream/50 text-left text-brand-brown">
+              <tr>
+                <th className="p-3">Número</th>
+                <th className="p-3">Proveedor</th>
+                <th className="p-3">Emisión</th>
+                <th className="p-3">Vencimiento</th>
+                <th className="p-3 text-right">Total</th>
+                <th className="p-3 text-right">Pagado</th>
+                <th className="p-3 text-right">Saldo</th>
+                <th className="p-3">Estado</th>
+                <th className="p-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((i) => {
+                const saldo = i.amount - i.paidAmount;
+                const days = daysUntil(i.dueDate);
+                const canPay = saldo > 0.01 && i.status !== "ANULADA";
+                return (
+                  <tr
+                    key={i.id}
+                    className="border-t border-brand-orange/10 hover:bg-brand-cream/20"
+                  >
+                    <td className="p-3 font-mono text-xs">{i.number}</td>
+                    <td className="p-3">
+                      <Link
+                        href={`/terceros/${i.thirdPartyId}`}
+                        className="text-brand-brown hover:text-brand-red hover:underline"
+                      >
+                        {i.thirdPartyName}
+                      </Link>
+                    </td>
+                    <td className="p-3 text-slate-600">{formatDate(i.issueDate)}</td>
+                    <td className="p-3">
+                      {formatDate(i.dueDate)}
+                      {saldo > 0.01 && days < 0 && (
+                        <span className="text-xs text-red-600 ml-1">
+                          ({Math.abs(days)}d)
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3 text-right">{formatCOP(i.amount)}</td>
+                    <td className="p-3 text-right text-slate-600">
+                      {formatCOP(i.paidAmount)}
+                    </td>
+                    <td className="p-3 text-right font-semibold text-rose-700">
+                      {formatCOP(saldo)}
+                    </td>
+                    <td className="p-3">
+                      <StatusBadge status={i.status} />
+                    </td>
+                    <td className="p-3 text-right space-x-2 whitespace-nowrap">
+                      {canEdit && (
+                        <>
                           <button
-                            onClick={() => {
-                              setMsg(null);
-                              setPayInvoice(i);
-                            }}
-                            className="text-sm text-brand-red hover:underline font-medium"
+                            onClick={() => setManagePaymentsInvoice(i)}
+                            className="text-sm text-brand-brown hover:underline font-medium"
                           >
-                            Registrar pago
+                            Ver Pagos
                           </button>
-                        )}
-                        {i.status !== "ANULADA" && (
-                          <>
+                          {canPay && (
                             <button
                               onClick={() => {
                                 setMsg(null);
-                                setEditInvoice(i);
+                                setPayInvoice(i);
                               }}
-                              className="text-sm text-slate-600 hover:underline"
+                              className="text-sm text-brand-red hover:underline font-medium"
                             >
-                              Editar
+                              Registrar pago
                             </button>
-                            <button
-                              onClick={() => onDelete(i)}
-                              className="text-sm text-slate-500 hover:underline"
-                            >
-                              Anular
-                            </button>
-                          </>
-                        )}
-                      </>
-                    )}
+                          )}
+                          {i.status !== "ANULADA" && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setMsg(null);
+                                  setEditInvoice(i);
+                                }}
+                                className="text-sm text-slate-600 hover:underline"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => onDelete(i)}
+                                className="text-sm text-slate-500 hover:underline"
+                              >
+                                Anular
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="p-6 text-center text-slate-500">
+                    No hay facturas con los filtros actuales
                   </td>
                 </tr>
-              );
-            })}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={8} className="p-6 text-center text-slate-500">
-                  No hay facturas con los filtros actuales
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Modal nueva factura por pagar */}
@@ -358,110 +406,58 @@ export function PayablesTable({
               Nueva factura por pagar
             </h2>
             <p className="text-sm text-slate-500 mb-3">
-              Empresa:{" "}
-              <span className="text-brand-red font-semibold">{businessName}</span>
+              Empresa: <span className="text-brand-red font-semibold">{businessName}</span>
             </p>
             <form onSubmit={onCreate} className="space-y-3">
               <div>
-                <label className="text-sm font-medium text-brand-brown">
-                  Proveedor
-                </label>
+                <label className="text-sm font-medium text-brand-brown">Proveedor</label>
                 <select
                   name="thirdPartyId"
                   required
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                   defaultValue=""
                 >
-                  <option value="" disabled>
-                    Selecciona un proveedor…
-                  </option>
+                  <option value="" disabled>Selecciona un proveedor…</option>
                   {parties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
+                    <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium text-brand-brown">
-                    Número
-                  </label>
-                  <Input
-                    name="number"
-                    required
-                    placeholder={`Ej: ${defaults.prefix}0001`}
-                  />
+                  <label className="text-sm font-medium text-brand-brown">Número</label>
+                  <Input name="number" required placeholder={`Ej: ${defaults.prefix}0001`} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-brand-brown">
-                    Monto
-                  </label>
-                  <Input
-                    name="amount"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    placeholder="0.00"
-                  />
+                  <label className="text-sm font-medium text-brand-brown">Monto</label>
+                  <Input name="amount" type="number" step="0.01" min="0.01" required placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-brand-brown">
-                    Emisión
-                  </label>
-                  <Input
-                    name="issueDate"
-                    type="date"
-                    required
-                    defaultValue={new Date().toISOString().slice(0, 10)}
-                  />
+                  <label className="text-sm font-medium text-brand-brown">Emisión</label>
+                  <Input name="issueDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-brand-brown">
-                    Vencimiento
-                  </label>
+                  <label className="text-sm font-medium text-brand-brown">Vencimiento</label>
                   <Input
                     name="dueDate"
                     type="date"
                     required
-                    defaultValue={
-                      new Date(Date.now() + defaults.dueDays * 86400000)
-                        .toISOString()
-                        .slice(0, 10)
-                    }
+                    defaultValue={new Date(Date.now() + defaults.dueDays * 86400000).toISOString().slice(0, 10)}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-brand-brown">
-                  Notas (opcional)
-                </label>
+                <label className="text-sm font-medium text-brand-brown">Notas (opcional)</label>
                 <Input name="notes" placeholder="Observaciones" />
               </div>
 
-              {msg && (
-                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
-                  {msg}
-                </p>
-              )}
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setNewOpen(false)}
-                  disabled={loading}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-brand-red hover:bg-brand-red/90 text-white"
-                >
+                <Button type="button" variant="outline" onClick={() => setNewOpen(false)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">
                   {loading ? "Guardando..." : "Crear factura"}
                 </Button>
               </div>
@@ -474,12 +470,9 @@ export function PayablesTable({
       {payInvoice && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold text-brand-brown mb-1">
-              Registrar pago
-            </h2>
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Registrar pago</h2>
             <p className="text-sm text-slate-500 mb-4">
-              Factura <span className="font-mono">{payInvoice.number}</span> ·{" "}
-              {payInvoice.thirdPartyName}
+              Factura <span className="font-mono">{payInvoice.number}</span> · {payInvoice.thirdPartyName}
             </p>
             <div className="bg-brand-cream/40 rounded-lg p-3 mb-4 text-sm">
               <div className="flex justify-between">
@@ -491,9 +484,7 @@ export function PayablesTable({
             </div>
             <form onSubmit={onPay} className="space-y-3">
               <div>
-                <label className="text-sm font-medium text-brand-brown">
-                  Monto a pagar
-                </label>
+                <label className="text-sm font-medium text-brand-brown">Monto a pagar</label>
                 <Input
                   name="amount"
                   type="number"
@@ -501,31 +492,16 @@ export function PayablesTable({
                   min="0.01"
                   max={payInvoice.amount - payInvoice.paidAmount}
                   required
-                  defaultValue={(
-                    payInvoice.amount - payInvoice.paidAmount
-                  ).toFixed(2)}
+                  defaultValue={(payInvoice.amount - payInvoice.paidAmount).toFixed(2)}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-brand-brown">
-                  Fecha
-                </label>
-                <Input
-                  name="date"
-                  type="date"
-                  required
-                  defaultValue={new Date().toISOString().slice(0, 10)}
-                />
+                <label className="text-sm font-medium text-brand-brown">Fecha</label>
+                <Input name="date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
               </div>
               <div>
-                <label className="text-sm font-medium text-brand-brown">
-                  Método
-                </label>
-                <select
-                  name="method"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                  defaultValue="Transferencia"
-                >
+                <label className="text-sm font-medium text-brand-brown">Método</label>
+                <select name="method" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" defaultValue="Transferencia">
                   <option>Efectivo</option>
                   <option>Transferencia</option>
                   <option>PSE</option>
@@ -533,32 +509,15 @@ export function PayablesTable({
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium text-brand-brown">
-                  Referencia (opcional)
-                </label>
+                <label className="text-sm font-medium text-brand-brown">Referencia (opcional)</label>
                 <Input name="reference" placeholder="Nro. transacción" />
               </div>
 
-              {msg && (
-                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
-                  {msg}
-                </p>
-              )}
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setPayInvoice(null)}
-                  disabled={loading}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-brand-red hover:bg-brand-red/90 text-white"
-                >
+                <Button type="button" variant="outline" onClick={() => setPayInvoice(null)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">
                   {loading ? "Guardando..." : "Registrar pago"}
                 </Button>
               </div>

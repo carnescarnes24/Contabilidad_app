@@ -9,23 +9,46 @@ export default async function CuentasPorPagarReportPage() {
   const business = await getCurrentBusiness();
   if (!business) return <p>Sin negocio activo</p>;
 
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      businessId: business.id,
-      type: "PAGAR",
-      status: { notIn: ["PAGADA", "ANULADA"] },
-    },
-    include: { thirdParty: true },
-  });
+  const [invoices, configs] = await Promise.all([
+    prisma.invoice.findMany({
+      where: {
+        businessId: business.id,
+        type: "PAGAR",
+        status: { notIn: ["PAGADA", "ANULADA"] },
+      },
+      include: { thirdParty: true },
+      orderBy: { dueDate: "asc" },
+    }),
+    prisma.appConfig.findMany({ where: { businessId: business.id } })
+  ]);
 
-  const map = new Map<string, {
-    id: string;
-    name: string;
-    docType: string;
-    docNumber: string;
-    invoices: typeof invoices;
-  }>();
+  const configMap = configs.reduce((acc, curr) => {
+    acc[curr.key] = curr.value;
+    return acc;
+  }, {} as Record<string, string>);
 
+  const reportConfig = {
+    tradeName: configMap["trade_name"] || business.name,
+    logoUrl: configMap["logo_url"] || "",
+  };
+
+  // 1. Datos para el reporte detallado
+  const detallado = invoices.map(inv => ({
+    id: inv.id,
+    number: inv.number,
+    thirdPartyName: inv.thirdParty.name,
+    docType: inv.thirdParty.docType,
+    docNumber: inv.thirdParty.docNumber,
+    issueDate: inv.issueDate.toISOString(),
+    dueDate: inv.dueDate.toISOString(),
+    amount: Number(inv.amount),
+    paidAmount: Number(inv.paidAmount),
+    saldo: Number(inv.amount) - Number(inv.paidAmount),
+    status: inv.status,
+  }));
+
+  // 2. Datos para el reporte resumido
+  const map = new Map<string, any>();
   for (const inv of invoices) {
     const key = inv.thirdPartyId;
     if (!map.has(key)) {
@@ -40,26 +63,16 @@ export default async function CuentasPorPagarReportPage() {
     map.get(key)!.invoices.push(inv);
   }
 
-  const rows = Array.from(map.values()).map((p) => {
-    const saldo = p.invoices.reduce(
-      (s, i) => s + Number(i.amount) - Number(i.paidAmount),
-      0
-    );
+  const resumido = Array.from(map.values()).map((p: any) => {
+    const saldo = p.invoices.reduce((s: number, i: any) => s + Number(i.amount) - Number(i.paidAmount), 0);
     const buckets = agingFromInvoices(p.invoices);
-    return {
-      id: p.id,
-      name: p.name,
-      docType: p.docType,
-      docNumber: p.docNumber,
-      saldo,
-      ...buckets,
-    };
+    return { id: p.id, name: p.name, docType: p.docType, docNumber: p.docNumber, saldo, ...buckets };
   });
+  resumido.sort((a: any, b: any) => b.saldo - a.saldo);
 
-  rows.sort((a, b) => b.saldo - a.saldo);
-
-  const totales = rows.reduce(
-    (acc, r) => ({
+  // 3. Cálculo de totales para el resumen
+  const totalesResumido = resumido.reduce(
+    (acc: any, r: any) => ({
       saldo: acc.saldo + r.saldo,
       corriente: acc.corriente + r.corriente,
       d1_30: acc.d1_30 + r.d1_30,
@@ -72,9 +85,11 @@ export default async function CuentasPorPagarReportPage() {
 
   return (
     <CuentasPorPagarReport
-      businessName={business.name}
-      rows={rows}
-      totales={totales}
+      businessName={reportConfig.tradeName}
+      logoUrl={reportConfig.logoUrl}
+      detallado={detallado}
+      resumido={resumido}
+      totalesResumido={totalesResumido}
     />
   );
 }
