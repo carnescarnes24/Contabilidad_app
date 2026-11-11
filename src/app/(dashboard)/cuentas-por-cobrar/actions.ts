@@ -6,6 +6,12 @@ import { getCurrentBusiness } from "@/lib/current-business";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+// Helper para ajustar la fecha y evitar el desfase de zona horaria
+const parseSafeDate = (dateObj: Date) => {
+  const isoStr = dateObj.toISOString().split('T')[0];
+  return new Date(`${isoStr}T12:00:00`);
+};
+
 async function requireSession() {
   const session = await auth();
   if (!session) throw new Error("No autenticado");
@@ -39,17 +45,20 @@ export async function createReceivable(input: unknown) {
   });
   if (exists) throw new Error("Ya existe una factura con ese número");
 
+  const safeIssueDate = parseSafeDate(data.issueDate);
+  const safeDueDate = parseSafeDate(data.dueDate);
+
   await prisma.invoice.create({
     data: {
       businessId: business.id,
       thirdPartyId: data.thirdPartyId,
       type: "COBRAR",
       number: data.number,
-      issueDate: data.issueDate,
-      dueDate: data.dueDate,
+      issueDate: safeIssueDate,
+      dueDate: safeDueDate,
       amount: data.amount,
       notes: data.notes || null,
-      status: data.dueDate < new Date() ? "VENCIDA" : "PENDIENTE",
+      status: safeDueDate < new Date() ? "VENCIDA" : "PENDIENTE",
     },
   });
 
@@ -58,7 +67,7 @@ export async function createReceivable(input: unknown) {
   revalidatePath("/terceros");
 }
 
-// --- NUEVO: Editar factura ---
+// --- Editar factura ---
 const editSchema = z.object({
   number: z.string().min(1, "Número requerido"),
   issueDate: z.coerce.date(),
@@ -84,19 +93,20 @@ export async function updateInvoice(id: string, input: unknown) {
     throw new Error("No se puede cambiar el monto de una factura que ya tiene pagos registrados.");
   }
 
-  // Verificar que el nuevo número no exista
   const exists = await prisma.invoice.findFirst({
     where: { businessId: business.id, type: "COBRAR", number: data.number, NOT: { id } },
   });
   if (exists) throw new Error("Ya existe otra factura con ese número");
 
-  // Recalcular estado
+  const safeIssueDate = parseSafeDate(data.issueDate);
+  const safeDueDate = parseSafeDate(data.dueDate);
+
   let newStatus = invoice.status;
   if (Number(invoice.paidAmount) >= data.amount) {
     newStatus = "PAGADA";
   } else if (Number(invoice.paidAmount) > 0) {
     newStatus = "PARCIAL";
-  } else if (data.dueDate < new Date()) {
+  } else if (safeDueDate < new Date()) {
     newStatus = "VENCIDA";
   } else {
     newStatus = "PENDIENTE";
@@ -106,8 +116,8 @@ export async function updateInvoice(id: string, input: unknown) {
     where: { id },
     data: {
       number: data.number,
-      issueDate: data.issueDate,
-      dueDate: data.dueDate,
+      issueDate: safeIssueDate,
+      dueDate: safeDueDate,
       amount: data.amount,
       notes: data.notes || null,
       status: newStatus
@@ -205,7 +215,7 @@ export async function registerPayment(
   revalidatePath("/terceros");
 }
 
-// --- NUEVO: Eliminar un pago individual ---
+// --- Eliminar un pago individual ---
 export async function deletePayment(paymentId: string, invoiceId: string) {
   await requireSession();
   const business = await getCurrentBusiness();

@@ -39,13 +39,15 @@ export default async function DashboardLayout({
   const current = await getCurrentBusiness();
 
   return (
-    <div className="min-h-screen flex bg-[#fdfaf3]">
-      {/* Sidebar */}
+    // 1. Cambiamos min-h-screen a h-screen y agregamos overflow-hidden
+    <div className="h-screen flex bg-[#fdfaf3] overflow-hidden">
+      
+      {/* Sidebar: Ya tiene shrink-0, así que se mantendrá fijo */}
       <aside className="w-60 bg-white border-r-2 border-brand-orange/30 p-4 hidden md:flex md:flex-col shrink-0">
         <h2 className="font-bold text-lg text-brand-red mb-6 flex items-center gap-2">
           <span>📊</span> Contabilidad a tu alcance
         </h2>
-        <nav className="space-y-1 flex-1">
+        <nav className="space-y-1 flex-1 overflow-y-auto"> {/* Scroll independiente por si hay muchos links */}
           {nav
             .filter((n) => !n.adminOnly || role === "ADMIN")
             .map((n) => (
@@ -61,8 +63,10 @@ export default async function DashboardLayout({
       </aside>
 
       {/* Contenedor Principal */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b-2 border-brand-gold/40 px-6 py-2.5 flex items-center justify-between shadow-sm shrink-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        
+        {/* Header: Se mantiene fijo arriba gracias a shrink-0 */}
+        <header className="bg-white border-b-2 border-brand-gold/40 px-6 py-2.5 flex items-center justify-between shadow-sm shrink-0 z-10">
           <BusinessSwitcher
             businesses={businesses}
             current={current?.id ?? businesses[0]?.id ?? ""}
@@ -74,8 +78,8 @@ export default async function DashboardLayout({
           />
         </header>
         
-        {/* Aquí se renderiza el contenido de cada módulo */}
-        <main className="flex-1 p-6 overflow-x-hidden">
+        {/* Main: Agregamos overflow-y-auto para que solo este bloque haga scroll */}
+        <main className="flex-1 p-6 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>

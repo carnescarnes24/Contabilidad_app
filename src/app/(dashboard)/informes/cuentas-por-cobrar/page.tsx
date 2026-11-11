@@ -16,7 +16,10 @@ export default async function CuentasPorCobrarReportPage() {
         type: "COBRAR",
         status: { notIn: ["PAGADA", "ANULADA"] },
       },
-      include: { thirdParty: true },
+      include: { 
+        thirdParty: true,
+        payments: { orderBy: { date: "desc" } } // <-- Traemos los pagos
+      },
       orderBy: { dueDate: "asc" },
     }),
     prisma.appConfig.findMany({ where: { businessId: business.id } })
@@ -32,7 +35,7 @@ export default async function CuentasPorCobrarReportPage() {
     logoUrl: configMap["logo_url"] || "",
   };
 
-  // 1. Datos para el reporte detallado
+  // 1. Datos para el reporte detallado (factura por factura con sus pagos)
   const detallado = invoices.map(inv => ({
     id: inv.id,
     number: inv.number,
@@ -45,9 +48,16 @@ export default async function CuentasPorCobrarReportPage() {
     paidAmount: Number(inv.paidAmount),
     saldo: Number(inv.amount) - Number(inv.paidAmount),
     status: inv.status,
+    payments: inv.payments.map(p => ({ // <-- Abonos por factura
+      id: p.id,
+      amount: Number(p.amount),
+      date: p.date.toISOString(),
+      method: p.method,
+      reference: p.reference
+    }))
   }));
 
-  // 2. Datos para el reporte resumido
+  // 2. Datos para el reporte resumido (agrupado por tercero)
   const map = new Map<string, any>();
   for (const inv of invoices) {
     const key = inv.thirdPartyId;
@@ -65,8 +75,17 @@ export default async function CuentasPorCobrarReportPage() {
 
   const resumido = Array.from(map.values()).map((p: any) => {
     const saldo = p.invoices.reduce((s: number, i: any) => s + Number(i.amount) - Number(i.paidAmount), 0);
+    const totalAbonado = p.invoices.reduce((s: number, i: any) => s + Number(i.paidAmount), 0); // <-- Total abonado
     const buckets = agingFromInvoices(p.invoices);
-    return { id: p.id, name: p.name, docType: p.docType, docNumber: p.docNumber, saldo, ...buckets };
+    return { 
+      id: p.id, 
+      name: p.name, 
+      docType: p.docType, 
+      docNumber: p.docNumber, 
+      saldo, 
+      totalAbonado, 
+      ...buckets 
+    };
   });
   resumido.sort((a: any, b: any) => b.saldo - a.saldo);
 
@@ -74,13 +93,14 @@ export default async function CuentasPorCobrarReportPage() {
   const totalesResumido = resumido.reduce(
     (acc: any, r: any) => ({
       saldo: acc.saldo + r.saldo,
+      totalAbonado: acc.totalAbonado + r.totalAbonado,
       corriente: acc.corriente + r.corriente,
       d1_30: acc.d1_30 + r.d1_30,
       d31_60: acc.d31_60 + r.d31_60,
       d61_90: acc.d61_90 + r.d61_90,
       d90plus: acc.d90plus + r.d90plus,
     }),
-    { saldo: 0, corriente: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 }
+    { saldo: 0, totalAbonado: 0, corriente: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 }
   );
 
   return (
@@ -89,7 +109,7 @@ export default async function CuentasPorCobrarReportPage() {
       logoUrl={reportConfig.logoUrl}
       detallado={detallado}
       resumido={resumido}
-      totalesResumido={totalesResumido} // <-- AQUÍ SE ENVÍA CORRECTAMENTE
+      totalesResumido={totalesResumido}
     />
   );
 }

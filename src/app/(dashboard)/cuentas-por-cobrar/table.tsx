@@ -29,19 +29,15 @@ type InvoiceRow = {
 
 type Party = { id: string; name: string };
 
-type StatusFilter =
-  | "TODAS"
-  | "PENDIENTE"
-  | "PARCIAL"
-  | "VENCIDA"
-  | "PAGADA"
-  | "ANULADA";
+type StatusFilter = "TODAS" | "PENDIENTE" | "PARCIAL" | "VENCIDA" | "PAGADA" | "ANULADA";
 
 type SortOption =
-  | "DUE_ASC"
-  | "DUE_DESC"
+  | "CONSECUTIVO"
+  | "TERCERO"
   | "ISSUE_DESC"
   | "ISSUE_ASC"
+  | "DUE_ASC"
+  | "DUE_DESC"
   | "AMOUNT_DESC"
   | "AMOUNT_ASC"
   | "BALANCE_DESC";
@@ -65,7 +61,7 @@ export function ReceivablesTable({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("TODAS");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOption>("DUE_ASC"); // <-- NUEVO ESTADO
+  const [sortBy, setSortBy] = useState<SortOption>("CONSECUTIVO"); // 1 y 2: Consecutivo por defecto
 
   // Modales
   const [newOpen, setNewOpen] = useState(false);
@@ -92,6 +88,11 @@ export function ReceivablesTable({
     // 2. Ordenar
     return [...filtered].sort((a, b) => {
       switch (sortBy) {
+        case "CONSECUTIVO":
+          // Ordenamiento natural (ej: FV-2 va antes que FV-10)
+          return a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: 'base' });
+        case "TERCERO":
+          return a.thirdPartyName.localeCompare(b.thirdPartyName);
         case "DUE_ASC":
           return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
         case "DUE_DESC":
@@ -238,21 +239,6 @@ export function ReceivablesTable({
             <option value="PAGADA">Pagadas</option>
             <option value="ANULADA">Anuladas</option>
           </select>
-          
-          {/* NUEVO SELECTOR DE ORDEN */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="border border-brand-orange/40 rounded-lg px-3 py-2 text-sm bg-white text-brand-brown"
-          >
-            <option value="DUE_ASC">Vencimiento (Próximas)</option>
-            <option value="DUE_DESC">Vencimiento (Lejanas)</option>
-            <option value="ISSUE_DESC">Emisión (Recientes)</option>
-            <option value="ISSUE_ASC">Emisión (Antiguas)</option>
-            <option value="AMOUNT_DESC">Monto (Mayor a menor)</option>
-            <option value="AMOUNT_ASC">Monto (Menor a mayor)</option>
-            <option value="BALANCE_DESC">Saldo Pendiente (Mayor)</option>
-          </select>
 
           <label className="text-sm text-brand-brown flex items-center gap-1 ml-2">
             <input
@@ -300,15 +286,68 @@ export function ReceivablesTable({
       <div className="bg-white rounded-2xl border-2 border-brand-orange/20 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
+            {/* 3. Filtro de orden en los encabezados */}
             <thead className="bg-brand-cream/50 text-left text-brand-brown">
               <tr>
-                <th className="p-3">Número</th>
-                <th className="p-3">Tercero</th>
-                <th className="p-3">Emisión</th>
-                <th className="p-3">Vencimiento</th>
-                <th className="p-3 text-right">Total</th>
-                <th className="p-3 text-right">Pagado</th>
-                <th className="p-3 text-right">Saldo</th>
+                <th className="p-3">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="font-semibold text-brand-brown bg-transparent border-none cursor-pointer focus:outline-none w-full appearance-none"
+                  >
+                    <option value="CONSECUTIVO">Número ↓</option>
+                    <option value="ISSUE_DESC">Número (Recientes)</option>
+                  </select>
+                </th>
+                <th className="p-3">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="font-semibold text-brand-brown bg-transparent border-none cursor-pointer focus:outline-none w-full appearance-none"
+                  >
+                    <option value="TERCERO">Tercero (A-Z)</option>
+                  </select>
+                </th>
+                <th className="p-3">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="font-semibold text-brand-brown bg-transparent border-none cursor-pointer focus:outline-none w-full appearance-none"
+                  >
+                    <option value="ISSUE_DESC">Emisión ↓</option>
+                    <option value="ISSUE_ASC">Emisión ↑</option>
+                  </select>
+                </th>
+                <th className="p-3">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="font-semibold text-brand-brown bg-transparent border-none cursor-pointer focus:outline-none w-full appearance-none"
+                  >
+                    <option value="DUE_ASC">Vencimiento ↑</option>
+                    <option value="DUE_DESC">Vencimiento ↓</option>
+                  </select>
+                </th>
+                <th className="p-3 text-right">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="font-semibold text-brand-brown bg-transparent border-none cursor-pointer focus:outline-none w-full text-right appearance-none"
+                  >
+                    <option value="AMOUNT_DESC">Total ↓</option>
+                    <option value="AMOUNT_ASC">Total ↑</option>
+                  </select>
+                </th>
+                <th className="p-3 text-right text-slate-600">Pagado</th>
+                <th className="p-3 text-right">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="font-semibold text-brand-brown bg-transparent border-none cursor-pointer focus:outline-none w-full text-right appearance-none"
+                  >
+                    <option value="BALANCE_DESC">Saldo ↓</option>
+                  </select>
+                </th>
                 <th className="p-3">Estado</th>
                 <th className="p-3 text-right">Acciones</th>
               </tr>
@@ -319,16 +358,10 @@ export function ReceivablesTable({
                 const days = daysUntil(i.dueDate);
                 const canPay = saldo > 0.01 && i.status !== "ANULADA";
                 return (
-                  <tr
-                    key={i.id}
-                    className="border-t border-brand-orange/10 hover:bg-brand-cream/20"
-                  >
+                  <tr key={i.id} className="border-t border-brand-orange/10 hover:bg-brand-cream/20">
                     <td className="p-3 font-mono text-xs">{i.number}</td>
                     <td className="p-3">
-                      <Link
-                        href={`/terceros/${i.thirdPartyId}`}
-                        className="text-brand-brown hover:text-brand-red hover:underline"
-                      >
+                      <Link href={`/terceros/${i.thirdPartyId}`} className="text-brand-brown hover:text-brand-red hover:underline">
                         {i.thirdPartyName}
                       </Link>
                     </td>
@@ -336,58 +369,24 @@ export function ReceivablesTable({
                     <td className="p-3">
                       {formatDate(i.dueDate)}
                       {saldo > 0.01 && days < 0 && (
-                        <span className="text-xs text-red-600 ml-1">
-                          ({Math.abs(days)}d)
-                        </span>
+                        <span className="text-xs text-red-600 ml-1">({Math.abs(days)}d)</span>
                       )}
                     </td>
                     <td className="p-3 text-right">{formatCOP(i.amount)}</td>
-                    <td className="p-3 text-right text-slate-600">
-                      {formatCOP(i.paidAmount)}
-                    </td>
-                    <td className="p-3 text-right font-semibold text-emerald-700">
-                      {formatCOP(saldo)}
-                    </td>
-                    <td className="p-3">
-                      <StatusBadge status={i.status} />
-                    </td>
+                    <td className="p-3 text-right text-slate-600">{formatCOP(i.paidAmount)}</td>
+                    <td className="p-3 text-right font-semibold text-emerald-700">{formatCOP(saldo)}</td>
+                    <td className="p-3"><StatusBadge status={i.status} /></td>
                     <td className="p-3 text-right space-x-2 whitespace-nowrap">
                       {canEdit && (
                         <>
-                          <button
-                            onClick={() => setManagePaymentsInvoice(i)}
-                            className="text-sm text-brand-brown hover:underline font-medium"
-                          >
-                            Ver Pagos
-                          </button>
+                          <button onClick={() => setManagePaymentsInvoice(i)} className="text-sm text-brand-brown hover:underline font-medium">Ver Pagos</button>
                           {canPay && (
-                            <button
-                              onClick={() => {
-                                setMsg(null);
-                                setPayInvoice(i);
-                              }}
-                              className="text-sm text-brand-red hover:underline font-medium"
-                            >
-                              Registrar pago
-                            </button>
+                            <button onClick={() => { setMsg(null); setPayInvoice(i); }} className="text-sm text-brand-red hover:underline font-medium">Registrar pago</button>
                           )}
                           {i.status !== "ANULADA" && (
                             <>
-                              <button
-                                onClick={() => {
-                                  setMsg(null);
-                                  setEditInvoice(i);
-                                }}
-                                className="text-sm text-slate-600 hover:underline"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => onDelete(i)}
-                                className="text-sm text-slate-500 hover:underline"
-                              >
-                                Anular
-                              </button>
+                              <button onClick={() => { setMsg(null); setEditInvoice(i); }} className="text-sm text-slate-600 hover:underline">Editar</button>
+                              <button onClick={() => onDelete(i)} className="text-sm text-slate-500 hover:underline">Anular</button>
                             </>
                           )}
                         </>
@@ -398,9 +397,7 @@ export function ReceivablesTable({
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="p-6 text-center text-slate-500">
-                    No hay facturas con los filtros actuales
-                  </td>
+                  <td colSpan={9} className="p-6 text-center text-slate-500">No hay facturas con los filtros actuales</td>
                 </tr>
               )}
             </tbody>
@@ -412,34 +409,16 @@ export function ReceivablesTable({
       {newOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-brand-brown mb-1">
-              Nueva factura por cobrar
-            </h2>
-            <p className="text-sm text-slate-500 mb-3">
-              Empresa: <span className="text-brand-red font-semibold">{businessName}</span>
-            </p>
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Nueva factura por cobrar</h2>
+            <p className="text-sm text-slate-500 mb-3">Empresa: <span className="text-brand-red font-semibold">{businessName}</span></p>
             <form onSubmit={onCreate} className="space-y-3">
               <div>
-                <label className="text-sm font-medium text-brand-brown">
-                  Tercero (cliente)
-                </label>
-                <select
-                  name="thirdPartyId"
-                  required
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    Selecciona un cliente…
-                  </option>
-                  {parties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
+                <label className="text-sm font-medium text-brand-brown">Tercero (cliente)</label>
+                <select name="thirdPartyId" required className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" defaultValue="">
+                  <option value="" disabled>Selecciona un cliente…</option>
+                  {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium text-brand-brown">Número</label>
@@ -455,31 +434,17 @@ export function ReceivablesTable({
                 </div>
                 <div>
                   <label className="text-sm font-medium text-brand-brown">Vencimiento</label>
-                  <Input
-                    name="dueDate"
-                    type="date"
-                    required
-                    defaultValue={new Date(Date.now() + defaults.dueDays * 86400000).toISOString().slice(0, 10)}
-                  />
+                  <Input name="dueDate" type="date" required defaultValue={new Date(Date.now() + defaults.dueDays * 86400000).toISOString().slice(0, 10)} />
                 </div>
               </div>
-
               <div>
                 <label className="text-sm font-medium text-brand-brown">Notas (opcional)</label>
                 <Input name="notes" placeholder="Observaciones" />
               </div>
-
-              {msg && (
-                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>
-              )}
-
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setNewOpen(false)} disabled={loading}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">
-                  {loading ? "Guardando..." : "Crear factura"}
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setNewOpen(false)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">{loading ? "Guardando..." : "Crear factura"}</Button>
               </div>
             </form>
           </div>
@@ -490,32 +455,18 @@ export function ReceivablesTable({
       {payInvoice && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold text-brand-brown mb-1">
-              Registrar pago
-            </h2>
-            <p className="text-sm text-slate-500 mb-4">
-              Factura <span className="font-mono">{payInvoice.number}</span> · {payInvoice.thirdPartyName}
-            </p>
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Registrar pago</h2>
+            <p className="text-sm text-slate-500 mb-4">Factura <span className="font-mono">{payInvoice.number}</span> · {payInvoice.thirdPartyName}</p>
             <div className="bg-brand-cream/40 rounded-lg p-3 mb-4 text-sm">
               <div className="flex justify-between">
                 <span className="text-brand-brown">Saldo pendiente</span>
-                <span className="font-semibold text-emerald-700">
-                  {formatCOP(payInvoice.amount - payInvoice.paidAmount)}
-                </span>
+                <span className="font-semibold text-emerald-700">{formatCOP(payInvoice.amount - payInvoice.paidAmount)}</span>
               </div>
             </div>
             <form onSubmit={onPay} className="space-y-3">
               <div>
                 <label className="text-sm font-medium text-brand-brown">Monto a pagar</label>
-                <Input
-                  name="amount"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max={payInvoice.amount - payInvoice.paidAmount}
-                  required
-                  defaultValue={(payInvoice.amount - payInvoice.paidAmount).toFixed(2)}
-                />
+                <Input name="amount" type="number" step="0.01" min="0.01" max={payInvoice.amount - payInvoice.paidAmount} required defaultValue={(payInvoice.amount - payInvoice.paidAmount).toFixed(2)} />
               </div>
               <div>
                 <label className="text-sm font-medium text-brand-brown">Fecha</label>
@@ -535,18 +486,10 @@ export function ReceivablesTable({
                 <label className="text-sm font-medium text-brand-brown">Referencia (opcional)</label>
                 <Input name="reference" placeholder="Nro. transacción" />
               </div>
-
-              {msg && (
-                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>
-              )}
-
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setPayInvoice(null)} disabled={loading}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">
-                  {loading ? "Guardando..." : "Registrar pago"}
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setPayInvoice(null)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">{loading ? "Guardando..." : "Registrar pago"}</Button>
               </div>
             </form>
           </div>
@@ -665,8 +608,10 @@ function formatCOP(n: number) {
   }).format(n);
 }
 
+// 4. Corrección de zona horaria (agregando T12:00:00)
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString("es-CO", {
+  const date = d.includes("T") ? d : `${d}T12:00:00`;
+  return new Date(date).toLocaleDateString("es-CO", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -674,5 +619,6 @@ function formatDate(d: string) {
 }
 
 function daysUntil(d: string) {
-  return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
+  const date = d.includes("T") ? d : `${d}T12:00:00`;
+  return Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
 }
