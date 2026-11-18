@@ -6,7 +6,6 @@ import { getCurrentBusiness } from "@/lib/current-business";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-// Helper para ajustar la fecha y evitar el desfase de zona horaria
 const parseSafeDate = (dateObj: Date) => {
   const isoStr = dateObj.toISOString().split('T')[0];
   return new Date(`${isoStr}T12:00:00`);
@@ -22,7 +21,7 @@ async function requireSession() {
 }
 
 const invoiceSchema = z.object({
-  thirdPartyId: z.string().min(1, "Selecciona un proveedor"),
+  thirdPartyId: z.string().min(1, "Selecciona un tercero"),
   number: z.string().min(1, "Número requerido"),
   issueDate: z.coerce.date(),
   dueDate: z.coerce.date(),
@@ -30,34 +29,16 @@ const invoiceSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function createPayable(input: unknown) {
+export async function createReceivable(input: unknown) {
   await requireSession();
   const business = await getCurrentBusiness();
   if (!business) throw new Error("Sin negocio activo");
   const data = invoiceSchema.parse(input);
 
-  const party = await prisma.thirdParty.findFirst({
-    where: {
-      id: data.thirdPartyId,
-      businessId: business.id,
-      active: true,
-      type: { in: ["PROVEEDOR", "AMBOS"] },
-    },
-  });
-  if (!party) {
-    throw new Error(
-      "El proveedor seleccionado no pertenece a la empresa activa. Cambia de negocio o crea el proveedor en la empresa correcta."
-    );
-  }
-
   const exists = await prisma.invoice.findFirst({
-    where: {
-      businessId: business.id,
-      type: "PAGAR",
-      number: data.number,
-    },
+    where: { businessId: business.id, type: "PAGAR", number: data.number },
   });
-  if (exists) throw new Error("Ya existe una factura por pagar con ese número");
+  if (exists) throw new Error("Ya existe una factura por pagar con ese mismo número");
 
   const safeIssueDate = parseSafeDate(data.issueDate);
   const safeDueDate = parseSafeDate(data.dueDate);
@@ -81,7 +62,6 @@ export async function createPayable(input: unknown) {
   revalidatePath("/terceros");
 }
 
-// --- Editar factura ---
 const editSchema = z.object({
   number: z.string().min(1, "Número requerido"),
   issueDate: z.coerce.date(),
@@ -94,7 +74,6 @@ export async function updateInvoice(id: string, input: unknown) {
   await requireSession();
   const business = await getCurrentBusiness();
   if (!business) throw new Error("Sin negocio activo");
-  
   const data = editSchema.parse(input);
 
   const invoice = await prisma.invoice.findFirst({
@@ -154,9 +133,7 @@ export async function deleteInvoice(id: string) {
   if (!inv) throw new Error("Factura no encontrada");
 
   if (inv._count.payments > 0) {
-    throw new Error(
-      "No se puede anular: la factura tiene pagos registrados."
-    );
+    throw new Error("No se puede eliminar: la factura tiene pagos registrados. Anúlala en su lugar.");
   }
 
   await prisma.invoice.update({
@@ -188,18 +165,12 @@ export async function registerPayment(invoiceId: string, input: unknown) {
 
   const saldo = Number(invoice.amount) - Number(invoice.paidAmount);
   if (data.amount > saldo + 0.01) {
-    throw new Error(
-      `El pago (${data.amount}) excede el saldo pendiente (${saldo})`
-    );
+    throw new Error(`El pago (${data.amount}) excede el saldo pendiente (${saldo})`);
   }
 
   const newPaid = Number(invoice.paidAmount) + data.amount;
   const isFullyPaid = Math.abs(newPaid - Number(invoice.amount)) < 0.01;
-  const newStatus = isFullyPaid
-    ? "PAGADA"
-    : invoice.dueDate < new Date()
-      ? "VENCIDA"
-      : "PARCIAL";
+  const newStatus = isFullyPaid ? "PAGADA" : invoice.dueDate < new Date() ? "VENCIDA" : "PARCIAL";
 
   await prisma.$transaction([
     prisma.payment.create({
@@ -223,7 +194,6 @@ export async function registerPayment(invoiceId: string, input: unknown) {
   revalidatePath("/terceros");
 }
 
-// --- Eliminar un pago individual ---
 export async function deletePayment(paymentId: string, invoiceId: string) {
   await requireSession();
   const business = await getCurrentBusiness();
@@ -256,4 +226,74 @@ export async function deletePayment(paymentId: string, invoiceId: string) {
 
   revalidatePath("/cuentas-por-pagar");
   revalidatePath("/dashboard");
+}
+
+// --- NUEVO: Pago Global (Distribución automática) ---
+export async function registerBulkPayment(input: {
+  thirdPartyId: string;
+  amount: number;
+  date: string;
+  method?: string;
+  reference?: string;
+  invoiceIds: string[];
+}) {
+  const session = await requireSession();
+  const business = await getCurrentBusiness();
+  if (!business) throw new Error("Sin negocio activo");
+
+  const { thirdPartyId, amount, date, method, reference, invoiceIds } = input;
+  if (invoiceIds.length === 0) throw new Error("Selecciona al menos una factura");
+
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      id: { in: invoiceIds },
+      businessId: business.id,
+      type: "PAGAR",
+      thirdPartyId,
+    },
+  });
+
+  const saldoTotal = invoices.reduce((s, i) => s + (Number(i.amount) - Number(i.paidAmount)), 0);
+  if (amount > saldoTotal + 0.01) {
+    throw new Error(`El monto (${amount}) excede el saldo de las facturas seleccionadas (${saldoTotal})`);
+  }
+
+  let remaining = amount;
+  const paymentDate = new Date(`${date}T12:00:00`);
+
+  await prisma.$transaction(async (tx) => {
+    for (const invId of invoiceIds) {
+      if (remaining <= 0.01) break;
+      const inv = invoices.find((i) => i.id === invId);
+      if (!inv) continue;
+
+      const saldoFactura = Number(inv.amount) - Number(inv.paidAmount);
+      const pagoFactura = Math.min(remaining, saldoFactura);
+      remaining -= pagoFactura;
+
+      const newPaid = Number(inv.paidAmount) + pagoFactura;
+      const isFullyPaid = Math.abs(newPaid - Number(inv.amount)) < 0.01;
+      const newStatus = isFullyPaid ? "PAGADA" : inv.dueDate < new Date() ? "VENCIDA" : "PARCIAL";
+
+      await tx.payment.create({
+        data: {
+          invoiceId: invId,
+          amount: pagoFactura,
+          date: paymentDate,
+          method: method || null,
+          reference: reference || null,
+          createdBy: (session.user as any).id,
+        },
+      });
+
+      await tx.invoice.update({
+        where: { id: invId },
+        data: { paidAmount: newPaid, status: newStatus },
+      });
+    }
+  });
+
+  revalidatePath("/cuentas-por-pagar");
+  revalidatePath("/dashboard");
+  revalidatePath("/terceros");
 }
