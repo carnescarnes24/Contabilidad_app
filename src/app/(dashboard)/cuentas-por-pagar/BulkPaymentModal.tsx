@@ -85,6 +85,8 @@ export function BulkPaymentModal({
         reference,
         invoiceIds: selected,
       });
+      if (res?.error) setMsg(res.error);
+      else { onClose(); router.refresh(); }
       onClose();
       router.refresh();
     } catch (err) {

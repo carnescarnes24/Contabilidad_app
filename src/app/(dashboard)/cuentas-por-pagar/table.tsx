@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  createReceivable,
+  createPayable,
   deleteInvoice,
   registerPayment,
   updateInvoice,
@@ -126,7 +126,7 @@ export function PayablesTable({
     setMsg(null);
     const fd = new FormData(e.currentTarget);
     try {
-      await createReceivable({
+      const res = await createPayable({
         thirdPartyId: fd.get("thirdPartyId"),
         number: fd.get("number"),
         issueDate: fd.get("issueDate"),
@@ -134,8 +134,12 @@ export function PayablesTable({
         amount: fd.get("amount"),
         notes: fd.get("notes") || undefined,
       });
-      setNewOpen(false);
-      router.refresh();
+      if (res?.error) {
+        setMsg(res.error);
+      } else {
+        setNewOpen(false);
+        router.refresh();
+      }
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -150,14 +154,18 @@ export function PayablesTable({
     setMsg(null);
     const fd = new FormData(e.currentTarget);
     try {
-      await registerPayment(payInvoice.id, {
+      const res = await registerPayment(payInvoice.id, {
         amount: fd.get("amount"),
         date: fd.get("date"),
         method: fd.get("method") || undefined,
         reference: fd.get("reference") || undefined,
       });
-      setPayInvoice(null);
-      router.refresh();
+      if (res?.error) {
+        setMsg(res.error);
+      } else {
+        setPayInvoice(null);
+        router.refresh();
+      }
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -172,15 +180,19 @@ export function PayablesTable({
     setMsg(null);
     const fd = new FormData(e.currentTarget);
     try {
-      await updateInvoice(editInvoice.id, {
+      const res = await updateInvoice(editInvoice.id, {
         number: fd.get("number"),
         issueDate: fd.get("issueDate"),
         dueDate: fd.get("dueDate"),
         amount: fd.get("amount"),
         notes: fd.get("notes") || undefined,
       });
-      setEditInvoice(null);
-      router.refresh();
+      if (res?.error) {
+        setMsg(res.error);
+      } else {
+        setEditInvoice(null);
+        router.refresh();
+      }
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -191,9 +203,13 @@ export function PayablesTable({
   async function onDeletePayment(paymentId: string, invoiceId: string) {
     if (!confirm("¿Eliminar este pago? El saldo de la factura se recalculará.")) return;
     try {
-      await deletePayment(paymentId, invoiceId);
-      setManagePaymentsInvoice(null);
-      router.refresh();
+      const res = await deletePayment(paymentId, invoiceId);
+      if (res?.error) {
+        alert(res.error);
+      } else {
+        setManagePaymentsInvoice(null);
+        router.refresh();
+      }
     } catch (err) {
       alert((err as Error).message);
     }
@@ -202,8 +218,12 @@ export function PayablesTable({
   async function onDelete(inv: InvoiceRow) {
     if (!confirm(`¿Anular la factura ${inv.number}? Esta acción no elimina los pagos registrados.`)) return;
     try {
-      await deleteInvoice(inv.id);
-      router.refresh();
+      const res = await deleteInvoice(inv.id);
+      if (res?.error) {
+        alert(res.error);
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       alert((err as Error).message);
     }
@@ -214,7 +234,7 @@ export function PayablesTable({
       <div className="flex flex-col xl:flex-row xl:items-center gap-2 justify-between">
         <div className="flex flex-wrap gap-2 items-center">
           <Input
-            placeholder="Buscar por número o tercero..."
+            placeholder="Buscar por número o proveedor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full sm:w-64 border-brand-orange/40"
@@ -262,7 +282,7 @@ export function PayablesTable({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white rounded-xl border-2 border-brand-orange/20 p-3">
           <p className="text-xs text-slate-500">Saldo pendiente (filtro)</p>
-          <p className="text-xl font-bold text-emerald-600">{formatCOP(totals.pendiente)}</p>
+          <p className="text-xl font-bold text-rose-600">{formatCOP(totals.pendiente)}</p>
         </div>
         <div className="bg-white rounded-xl border-2 border-red-200 p-3">
           <p className="text-xs text-slate-500">Vencido (filtro)</p>
@@ -287,7 +307,7 @@ export function PayablesTable({
                 </th>
                 <th className="p-3">
                   <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)} className="font-semibold text-brand-brown bg-transparent border-none cursor-pointer focus:outline-none w-full appearance-none">
-                    <option value="TERCERO">Tercero (A-Z)</option>
+                    <option value="TERCERO">Proveedor (A-Z)</option>
                   </select>
                 </th>
                 <th className="p-3">
@@ -379,11 +399,179 @@ export function PayablesTable({
         />
       )}
 
-      {/* Aquí van los modales de Nueva Factura, Registrar Pago, Editar y Gestión de Pagos (idénticos a como los tenías) */}
-      {newOpen && ( /* ... modal existente ... */ <div/> )}
-      {payInvoice && ( /* ... modal existente ... */ <div/> )}
-      {editInvoice && ( /* ... modal existente ... */ <div/> )}
-      {managePaymentsInvoice && ( /* ... modal existente ... */ <div/> )}
+      {/* Modal nueva factura */}
+      {newOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Nueva factura por pagar</h2>
+            <p className="text-sm text-slate-500 mb-3">Empresa: <span className="text-brand-red font-semibold">{businessName}</span></p>
+            <form onSubmit={onCreate} className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Proveedor</label>
+                <select name="thirdPartyId" required className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" defaultValue="">
+                  <option value="" disabled>Selecciona un proveedor…</option>
+                  {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Número</label>
+                  <Input name="number" required placeholder={`Ej: ${defaults.prefix}0001`} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Monto</label>
+                  <Input name="amount" type="number" step="0.01" min="0.01" required placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Emisión</label>
+                  <Input name="issueDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Vencimiento</label>
+                  <Input name="dueDate" type="date" required defaultValue={new Date(Date.now() + defaults.dueDays * 86400000).toISOString().slice(0, 10)} />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Notas (opcional)</label>
+                <Input name="notes" placeholder="Observaciones" />
+              </div>
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setNewOpen(false)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">{loading ? "Guardando..." : "Crear factura"}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal registrar pago */}
+      {payInvoice && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Registrar pago</h2>
+            <p className="text-sm text-slate-500 mb-4">Factura <span className="font-mono">{payInvoice.number}</span> · {payInvoice.thirdPartyName}</p>
+            <div className="bg-brand-cream/40 rounded-lg p-3 mb-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-brand-brown">Saldo pendiente</span>
+                <span className="font-semibold text-rose-700">{formatCOP(payInvoice.amount - payInvoice.paidAmount)}</span>
+              </div>
+            </div>
+            <form onSubmit={onPay} className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Monto a pagar</label>
+                <Input name="amount" type="number" step="0.01" min="0.01" max={payInvoice.amount - payInvoice.paidAmount} required defaultValue={(payInvoice.amount - payInvoice.paidAmount).toFixed(2)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Fecha</label>
+                <Input name="date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Método</label>
+                <select name="method" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" defaultValue="Transferencia">
+                  <option>Efectivo</option>
+                  <option>Transferencia</option>
+                  <option>PSE</option>
+                  <option>Cheque</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Referencia (opcional)</label>
+                <Input name="reference" placeholder="Nro. transacción" />
+              </div>
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setPayInvoice(null)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">{loading ? "Guardando..." : "Registrar pago"}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Factura */}
+      {editInvoice && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Editar Factura {editInvoice.number}</h2>
+            <p className="text-sm text-slate-500 mb-3">Empresa: {businessName}</p>
+            <form onSubmit={onEdit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Número</label>
+                  <Input name="number" defaultValue={editInvoice.number} required />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Monto</label>
+                  <Input name="amount" type="number" step="0.01" min="0.01" defaultValue={editInvoice.amount} required disabled={editInvoice.paidAmount > 0} />
+                  {editInvoice.paidAmount > 0 && <p className="text-[10px] text-red-500 mt-1">Bloqueado: la factura tiene pagos.</p>}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Emisión</label>
+                  <Input name="issueDate" type="date" defaultValue={new Date(editInvoice.issueDate).toISOString().slice(0, 10)} required />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-brand-brown">Vencimiento</label>
+                  <Input name="dueDate" type="date" defaultValue={new Date(editInvoice.dueDate).toISOString().slice(0, 10)} required />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-brand-brown">Notas (opcional)</label>
+                <Input name="notes" defaultValue={editInvoice.notes || ""} />
+              </div>
+              {msg && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{msg}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setEditInvoice(null)} disabled={loading}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="bg-brand-red hover:bg-brand-red/90 text-white">{loading ? "Guardando..." : "Guardar Cambios"}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Gestión de Pagos */}
+      {managePaymentsInvoice && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
+            <h2 className="text-lg font-semibold text-brand-brown mb-1">Pagos de la Factura {managePaymentsInvoice.number}</h2>
+            <p className="text-sm text-slate-500 mb-4">Total Factura: {formatCOP(managePaymentsInvoice.amount)}</p>
+            
+            {managePaymentsInvoice.payments.length === 0 ? (
+              <p className="text-sm text-slate-500 py-4 text-center">No hay pagos registrados.</p>
+            ) : (
+              <div className="border border-brand-orange/20 rounded-lg overflow-hidden mb-4">
+                <table className="w-full text-sm">
+                  <thead className="bg-brand-cream/50 text-left">
+                    <tr>
+                      <th className="p-2">Fecha</th>
+                      <th className="p-2">Método</th>
+                      <th className="p-2">Referencia</th>
+                      <th className="p-2 text-right">Monto</th>
+                      <th className="p-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {managePaymentsInvoice.payments.map(p => (
+                      <tr key={p.id} className="border-t border-brand-orange/10">
+                        <td className="p-2">{formatDate(p.date)}</td>
+                        <td className="p-2">{p.method || "-"}</td>
+                        <td className="p-2 text-xs text-slate-500">{p.reference || "-"}</td>
+                        <td className="p-2 text-right font-semibold text-rose-700">{formatCOP(p.amount)}</td>
+                        <td className="p-2 text-right">
+                          <button onClick={() => onDeletePayment(p.id, managePaymentsInvoice.id)} className="text-red-600 hover:underline text-xs">Eliminar</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setManagePaymentsInvoice(null)}>Cerrar</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
