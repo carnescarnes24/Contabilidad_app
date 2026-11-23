@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatDate, daysUntil } from "@/lib/date-utils";
 import {
   createPayable,
   deleteInvoice,
@@ -591,14 +592,4 @@ function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
 
 function formatCOP(n: number) {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
-}
-
-function formatDate(d: string) {
-  const date = d.includes("T") ? d : `${d}T12:00:00`;
-  return new Date(date).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function daysUntil(d: string) {
-  const date = d.includes("T") ? d : `${d}T12:00:00`;
-  return Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
 }

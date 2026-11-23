@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatDate, daysUntil } from "@/lib/date-utils";
 import {
   createReceivable,
   deleteInvoice,
@@ -154,7 +155,7 @@ export function ReceivablesTable({
     setMsg(null);
     const fd = new FormData(e.currentTarget);
     try {
-      await registerPayment(payInvoice.id, {
+      const res = await registerPayment(payInvoice.id, {
         amount: fd.get("amount"),
         date: fd.get("date"),
         method: fd.get("method") || undefined,
@@ -163,11 +164,9 @@ export function ReceivablesTable({
       if (res?.error) {
         setMsg(res.error);
       } else {
-        setNewOpen(false);
+        setPayInvoice(null);
         router.refresh();
       }
-      setPayInvoice(null);
-      router.refresh();
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -182,7 +181,7 @@ export function ReceivablesTable({
     setMsg(null);
     const fd = new FormData(e.currentTarget);
     try {
-      await updateInvoice(editInvoice.id, {
+      const res = await updateInvoice(editInvoice.id, {
         number: fd.get("number"),
         issueDate: fd.get("issueDate"),
         dueDate: fd.get("dueDate"),
@@ -192,11 +191,9 @@ export function ReceivablesTable({
       if (res?.error) {
         setMsg(res.error);
       } else {
-        setNewOpen(false);
+        setEditInvoice(null);
         router.refresh();
       }
-      setEditInvoice(null);
-      router.refresh();
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -207,9 +204,13 @@ export function ReceivablesTable({
   async function onDeletePayment(paymentId: string, invoiceId: string) {
     if (!confirm("¿Eliminar este pago? El saldo de la factura se recalculará.")) return;
     try {
-      await deletePayment(paymentId, invoiceId);
-      setManagePaymentsInvoice(null);
-      router.refresh();
+      const res = await deletePayment(paymentId, invoiceId);
+      if (res?.error) {
+        alert(res.error);
+      } else {
+        setManagePaymentsInvoice(null);
+        router.refresh();
+      }
     } catch (err) {
       alert((err as Error).message);
     }
@@ -218,10 +219,13 @@ export function ReceivablesTable({
   async function onDelete(inv: InvoiceRow) {
     if (!confirm(`¿Anular la factura ${inv.number}? Esta acción no elimina los pagos registrados.`)) return;
     try {
-      await deleteInvoice(inv.id);
-      if (res?.error) alert(res.error);
-      else router.refresh();
-      } catch (err) {
+      const res = await deleteInvoice(inv.id);
+      if (res?.error) {
+        alert(res.error);
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
       alert((err as Error).message);
     }
   }
@@ -527,7 +531,7 @@ export function ReceivablesTable({
         </div>
       )}
 
-      {/* Modal Gestión de Pagos (EL QUE FALTABA) */}
+      {/* Modal Gestión de Pagos */}
       {managePaymentsInvoice && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
@@ -589,14 +593,4 @@ function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
 
 function formatCOP(n: number) {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
-}
-
-function formatDate(d: string) {
-  const date = d.includes("T") ? d : `${d}T12:00:00`;
-  return new Date(date).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function daysUntil(d: string) {
-  const date = d.includes("T") ? d : `${d}T12:00:00`;
-  return Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
 }
