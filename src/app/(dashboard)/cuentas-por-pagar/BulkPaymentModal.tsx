@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { registerBulkPayment } from "./actions";
+import { formatDate, formatCOP } from "@/lib/date-utils"; // Usamos nuestras utilidades
 
 type InvoiceRow = {
   id: string;
@@ -30,7 +31,15 @@ export function BulkPaymentModal({
   const router = useRouter();
   const [thirdPartyId, setThirdPartyId] = useState("");
   const [amount, setAmount] = useState<number>(0);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  
+  // Fecha controlada para evitar Hydration Mismatch
+  const [date, setDate] = useState("");
+  useEffect(() => {
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    setDate(today);
+  }, []);
+
   const [method, setMethod] = useState("Transferencia");
   const [reference, setReference] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -77,7 +86,7 @@ export function BulkPaymentModal({
     setLoading(true);
     setMsg(null);
     try {
-      await registerBulkPayment({
+      const res = await registerBulkPayment({ // <-- Declaramos 'res'
         thirdPartyId,
         amount,
         date,
@@ -85,10 +94,13 @@ export function BulkPaymentModal({
         reference,
         invoiceIds: selected,
       });
-      if (res?.error) setMsg(res.error);
-      else { onClose(); router.refresh(); }
-      onClose();
-      router.refresh();
+      
+      if (res?.error) {
+        setMsg(res.error);
+      } else {
+        onClose();
+        router.refresh();
+      }
     } catch (err) {
       setMsg((err as Error).message);
     } finally {
@@ -182,7 +194,8 @@ export function BulkPaymentModal({
                               {isSel && <span className="bg-brand-red text-white rounded-full px-1.5 text-[10px] mr-1">{idx + 1}</span>}
                               {inv.number}
                             </td>
-                            <td className="p-2">{new Date(inv.dueDate).toLocaleDateString("es-CO")}</td>
+                            {/* Usamos formatDate en lugar de toLocaleDateString */}
+                            <td className="p-2">{formatDate(inv.dueDate)}</td>
                             <td className="p-2 text-right">{formatCOP(inv.amount - inv.paidAmount)}</td>
                             <td className="p-2 text-right font-semibold text-emerald-700">
                               {asignado > 0 ? formatCOP(asignado) : "—"}
@@ -219,8 +232,4 @@ export function BulkPaymentModal({
       </div>
     </div>
   );
-}
-
-function formatCOP(n: number) {
-  return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 }
