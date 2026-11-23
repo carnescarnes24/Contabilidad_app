@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatDate, daysUntil } from "@/lib/date-utils";
+import { formatDate, daysUntil, formatCOP, toInputDate } from "@/lib/date-utils";
 import {
   createPayable,
   deleteInvoice,
@@ -73,6 +73,17 @@ export function PayablesTable({
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // FECHAS CONTROLADAS PARA EVITAR HYDRATION MISMATCH
+  const [clientDates, setClientDates] = useState({ today: "", defaultDue: "" });
+
+  useEffect(() => {
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const due = new Date(Date.now() + defaults.dueDays * 86400000);
+    const defaultDue = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
+    setClientDates({ today, defaultDue });
+  }, [defaults.dueDays]);
 
   const rows = useMemo(() => {
     const filtered = initial.filter((i) => {
@@ -425,11 +436,11 @@ export function PayablesTable({
                 </div>
                 <div>
                   <label className="text-sm font-medium text-brand-brown">Emisión</label>
-                  <Input name="issueDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                  <Input name="issueDate" type="date" required defaultValue={clientDates.today} />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-brand-brown">Vencimiento</label>
-                  <Input name="dueDate" type="date" required defaultValue={new Date(Date.now() + defaults.dueDays * 86400000).toISOString().slice(0, 10)} />
+                  <Input name="dueDate" type="date" required defaultValue={clientDates.defaultDue} />
                 </div>
               </div>
               <div>
@@ -465,7 +476,7 @@ export function PayablesTable({
               </div>
               <div>
                 <label className="text-sm font-medium text-brand-brown">Fecha</label>
-                <Input name="date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                <Input name="date" type="date" required defaultValue={clientDates.today} />
               </div>
               <div>
                 <label className="text-sm font-medium text-brand-brown">Método</label>
@@ -509,11 +520,11 @@ export function PayablesTable({
                 </div>
                 <div>
                   <label className="text-sm font-medium text-brand-brown">Emisión</label>
-                  <Input name="issueDate" type="date" defaultValue={new Date(editInvoice.issueDate).toISOString().slice(0, 10)} required />
+                  <Input name="issueDate" type="date" defaultValue={toInputDate(editInvoice.issueDate)} required />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-brand-brown">Vencimiento</label>
-                  <Input name="dueDate" type="date" defaultValue={new Date(editInvoice.dueDate).toISOString().slice(0, 10)} required />
+                  <Input name="dueDate" type="date" defaultValue={toInputDate(editInvoice.dueDate)} required />
                 </div>
               </div>
               <div>
@@ -588,8 +599,4 @@ function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${map[status] ?? "bg-slate-100"}`}>{status}</span>
   );
-}
-
-function formatCOP(n: number) {
-  return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 }
